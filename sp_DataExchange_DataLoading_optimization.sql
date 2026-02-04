@@ -9,13 +9,12 @@ procedure with the corresponding optimized block below.
 
 /*================================================================================
 1) Financials staging
-Replace the existing INSERT into #Financials and the two UPDATEs that follow it
-with the block below.
+Replace the existing INSERT into #Financials with the block below (keep the
+two UPDATE statements that follow it unchanged).
 ================================================================================*/
 
         INSERT INTO #Financials (
             FinancialDate,
-            FinancialDate_new,
             MONTHSNO,
             Denomination,
             [YEAR],
@@ -24,46 +23,37 @@ with the block below.
             [Name],
             StatementType,
             FinancialValue,
-            FinancialCurrency,
-            IsConsolidated
+            FinancialCurrency
         )
         SELECT
-            d.FinancialDateParsed AS FinancialDate,
-            d.FinancialDateParsed AS FinancialDate_new,
-            f.MONTHSNO,
-            f.Denomination,
-            f.[YEAR],
-            f.[Type],
-            f.[Audit],
-            f.[Name],
-            f.StatementType,
-            f.FinancialValue,
-            f.FinancialCurrency,
-            CASE f.[Type]
-                WHEN 'Consolidated' THEN 1
-                WHEN 'Standalone' THEN 0
-                ELSE NULL
-            END AS IsConsolidated
+            CAST(f.FinancialDateRaw AS DATE) AS FinancialDate,
+            CAST(f.MONTHSNO AS INT) AS MONTHSNO,
+            f.Denomination AS Denomination,
+            CAST(f.[YEAR] AS INT) AS [YEAR],
+            f.[Type] AS [Type],
+            f.[Audit] AS [Audit],
+            f.[Name] AS [Name],
+            f.StatementType AS StatementType,
+            CAST(f.FinancialValueRaw AS DECIMAL(18,3)) AS FinancialValue,
+            f.FinancialCurrency AS FinancialCurrency
         FROM OPENJSON(@Json, '$.FINANCIALS.FINANCIAL')
         WITH (
             FinancialDateRaw NVARCHAR(20) '$.FINANCIALDATE',
-            MONTHSNO INT '$.MONTHSNO',
+            MONTHSNO NVARCHAR(20) '$.MONTHSNO',
             Denomination NVARCHAR(50) '$.Denomination',
-            [YEAR] INT '$.YEAR',
+            [YEAR] NVARCHAR(10) '$.YEAR',
             [Type] NVARCHAR(50) '$.TYPE',
             [Audit] NVARCHAR(50) '$.AUDIT',
             [Name] NVARCHAR(255) '$.NAME',
             StatementType NVARCHAR(50) '$.STATEMENTTYPE',
-            FinancialValue DECIMAL(18,3) '$.FINANCIALVALUE',
+            FinancialValueRaw NVARCHAR(50) '$.FINANCIALVALUE',
             FinancialCurrency NVARCHAR(10) '$.FINANCIALCURRENCY'
-        ) f
-        CROSS APPLY (
-            SELECT CONVERT(date, f.FinancialDateRaw) AS FinancialDateParsed
-        ) d;
+        ) f;
 
 /*================================================================================
 2) AdditionalFinancials recursive flatten
-Replace the WITH Statement ... UPDATE #FinancialAnalyses block with the one below.
+Replace the WITH Statement ... INSERT INTO #FinancialAnalyses block with the one
+below (keep the two UPDATE statements that follow it unchanged).
 ================================================================================*/
 
         -- Add index to track StatementID
@@ -76,26 +66,26 @@ Replace the WITH Statement ... UPDATE #FinancialAnalyses block with the one belo
         ParsedStatements AS (
             SELECT
                 CAST(s.StatementID AS INT) AS StatementID,
-                ps.FinancialDateRaw,
-                ps.MONTHSNO,
-                ps.Denomination,
-                ps.[YEAR],
-                ps.[Type],
-                ps.[Audit],
-                ps.StatementType,
-                ps.FinancialCurrency,
-                ps.Analyses
+                ps.FINANCIALDATE AS FINANCIALDATE,
+                ps.MONTHSNO AS MONTHSNO,
+                ps.Denomination AS Denomination,
+                ps.[YEAR] AS [YEAR],
+                ps.[Type] AS [Type],
+                ps.[Audit] AS [Audit],
+                ps.STATEMENTTYPE AS STATEMENTTYPE,
+                ps.FINANCIALCURRENCY AS FINANCIALCURRENCY,
+                ps.Analyses AS Analyses
             FROM Statement s
             CROSS APPLY OPENJSON(s.StatementJson)
             WITH (
-                FinancialDateRaw NVARCHAR(20) '$.FINANCIALDATE',
-                MONTHSNO INT '$.MONTHSNO',
+                FINANCIALDATE NVARCHAR(20) '$.FINANCIALDATE',
+                MONTHSNO NVARCHAR(20) '$.MONTHSNO',
                 Denomination NVARCHAR(50) '$.Denomination',
-                [YEAR] INT '$.YEAR',
+                [YEAR] NVARCHAR(10) '$.YEAR',
                 [Type] NVARCHAR(50) '$.TYPE',
                 [Audit] NVARCHAR(50) '$.AUDIT',
-                StatementType NVARCHAR(50) '$.STATEMENTTYPE',
-                FinancialCurrency NVARCHAR(10) '$.FINANCIALCURRENCY',
+                STATEMENTTYPE NVARCHAR(50) '$.STATEMENTTYPE',
+                FINANCIALCURRENCY NVARCHAR(10) '$.FINANCIALCURRENCY',
                 Analyses NVARCHAR(MAX) '$.Analyses' AS JSON
             ) ps
         ),
@@ -103,14 +93,14 @@ Replace the WITH Statement ... UPDATE #FinancialAnalyses block with the one belo
             -- Anchor members: root-level analyses
             SELECT
                 ps.StatementID,
-                TRY_CAST(ps.FinancialDateRaw AS DATE) AS FinancialDate,
+                TRY_CAST(ps.FINANCIALDATE AS DATE) AS FinancialDate,
                 ps.MONTHSNO,
                 ps.Denomination,
                 ps.[YEAR],
                 ps.[Type],
                 ps.[Audit],
-                ps.StatementType,
-                ps.FinancialCurrency,
+                ps.STATEMENTTYPE,
+                ps.FINANCIALCURRENCY,
                 a.[Code],
                 a.[Description],
                 a.FinancialValue,
@@ -156,7 +146,6 @@ Replace the WITH Statement ... UPDATE #FinancialAnalyses block with the one belo
         INSERT INTO #FinancialAnalyses (
             StatementID,
             FinancialDate,
-            FinancialDate_new,
             MONTHSNO,
             Denomination,
             [YEAR],
@@ -168,12 +157,10 @@ Replace the WITH Statement ... UPDATE #FinancialAnalyses block with the one belo
             [Description],
             FinancialValue,
             ParentCode,
-            [Level],
-            IsConsolidated
+            [Level]
         )
         SELECT
             StatementID,
-            FinancialDate,
             FinancialDate,
             MONTHSNO,
             Denomination,
@@ -186,18 +173,17 @@ Replace the WITH Statement ... UPDATE #FinancialAnalyses block with the one belo
             [Description],
             FinancialValue,
             ParentCode,
-            [Level],
-            CASE [Type]
-                WHEN 'Consolidated' THEN 1
-                WHEN 'Standalone' THEN 0
-                ELSE NULL
-            END AS IsConsolidated
+            [Level]
         FROM AnalysesRecursive;
 
 /*================================================================================
 3) Register lookup for UID/idatom (cursor removal)
-Replace the reg_cursor loop with the block below.
+Add an IDENTITY column to #REGISTERS for deterministic order, then replace the
+reg_cursor loop with the block below.
 ================================================================================*/
+
+        -- In the #REGISTERS temp table definition add:
+        -- ID INT IDENTITY(1,1) PRIMARY KEY,
 
         PRINT 'Condition 2 passed — checking all register numbers...';
 
@@ -218,17 +204,13 @@ Replace the reg_cursor loop with the block below.
           AND ISNULL(a.IsDeleted, 0) = 0
           AND c.IdRegisteredCountry = @CountryID
           AND ISNULL(c.RegisteredName, c.[Name]) = @Subject
-        ;
+        ORDER BY r.ID;
 
         PRINT '  Derived @UID = ' + ISNULL(@UID, 'NULL');
 
         IF (@UID IS NOT NULL AND @UID <> '')
         BEGIN
             PRINT 'idatom resolved: ' + ISNULL(CAST(@idatom AS NVARCHAR(50)), 'NULL');
-        END
-        ELSE
-        BEGIN
-            PRINT 'No match found for any register number.';
         END
 
 /*================================================================================
@@ -238,6 +220,17 @@ Replace the TradingNames cursor block with the block below.
 
         IF EXISTS (SELECT 1 FROM #TradingNames)
         BEGIN
+            ;WITH LatestTradingNames AS (
+                SELECT
+                    tn.ID,
+                    tn.[Name],
+                    tn.IsNative,
+                    tn.IsHistory,
+                    tn.STARTDATE,
+                    tn.ENDDATE,
+                    ROW_NUMBER() OVER (PARTITION BY tn.[Name] ORDER BY tn.ID DESC) AS rn
+                FROM #TradingNames tn WITH (NOLOCK)
+            )
             UPDATE cn
                 SET cn.DateUpdated = GETDATE(),
                     cn.SourceId = @SourceID,
@@ -247,8 +240,9 @@ Replace the TradingNames cursor block with the block below.
                     cn.StartDate = tn.STARTDATE,
                     cn.EndDate = tn.STARTDATE
             FROM tblcompanies_names cn
-            JOIN #TradingNames tn
-                ON cn.IDATOM = @idatom
+            JOIN LatestTradingNames tn
+                ON tn.rn = 1
+               AND cn.IDATOM = @idatom
                AND cn.[Name] = tn.[Name];
 
             INSERT INTO tblcompanies_names (
@@ -274,8 +268,9 @@ Replace the TradingNames cursor block with the block below.
                 GETDATE(),
                 tn.STARTDATE,
                 tn.ENDDATE
-            FROM #TradingNames tn
-            WHERE NOT EXISTS (
+            FROM LatestTradingNames tn
+            WHERE tn.rn = 1
+              AND NOT EXISTS (
                 SELECT 1
                 FROM tblcompanies_names cn
                 WHERE cn.IDATOM = @idatom
