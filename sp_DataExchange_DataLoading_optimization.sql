@@ -28,14 +28,8 @@ with the block below.
             IsConsolidated
         )
         SELECT
-            COALESCE(
-                TRY_CONVERT(date, f.FinancialDateRaw, 103),
-                TRY_CONVERT(date, f.FinancialDateRaw, 112)
-            ) AS FinancialDate,
-            COALESCE(
-                TRY_CONVERT(date, f.FinancialDateRaw, 103),
-                TRY_CONVERT(date, f.FinancialDateRaw, 112)
-            ) AS FinancialDate_new,
+            d.FinancialDateParsed AS FinancialDate,
+            d.FinancialDateParsed AS FinancialDate_new,
             f.MONTHSNO,
             f.Denomination,
             f.[YEAR],
@@ -62,7 +56,10 @@ with the block below.
             StatementType NVARCHAR(50) '$.STATEMENTTYPE',
             FinancialValue DECIMAL(18,3) '$.FINANCIALVALUE',
             FinancialCurrency NVARCHAR(10) '$.FINANCIALCURRENCY'
-        ) f;
+        ) f
+        CROSS APPLY (
+            SELECT CONVERT(date, f.FinancialDateRaw) AS FinancialDateParsed
+        ) d;
 
 /*================================================================================
 2) AdditionalFinancials recursive flatten
@@ -106,10 +103,7 @@ Replace the WITH Statement ... UPDATE #FinancialAnalyses block with the one belo
             -- Anchor members: root-level analyses
             SELECT
                 ps.StatementID,
-                COALESCE(
-                    TRY_CONVERT(date, ps.FinancialDateRaw, 103),
-                    TRY_CONVERT(date, ps.FinancialDateRaw, 112)
-                ) AS FinancialDate,
+                TRY_CAST(ps.FinancialDateRaw AS DATE) AS FinancialDate,
                 ps.MONTHSNO,
                 ps.Denomination,
                 ps.[YEAR],
@@ -224,7 +218,7 @@ Replace the reg_cursor loop with the block below.
           AND ISNULL(a.IsDeleted, 0) = 0
           AND c.IdRegisteredCountry = @CountryID
           AND ISNULL(c.RegisteredName, c.[Name]) = @Subject
-        ORDER BY r.REGISTERNUMBER;
+        ;
 
         PRINT '  Derived @UID = ' + ISNULL(@UID, 'NULL');
 
@@ -251,7 +245,7 @@ Replace the TradingNames cursor block with the block below.
                     cn.IsHistory = tn.IsHistory,
                     cn.NameType = tn.IsNative,
                     cn.StartDate = tn.STARTDATE,
-                    cn.EndDate = tn.ENDDATE
+                    cn.EndDate = tn.STARTDATE
             FROM tblcompanies_names cn
             JOIN #TradingNames tn
                 ON cn.IDATOM = @idatom
@@ -300,13 +294,38 @@ Replace the Employees cursor block with the block below.
 
         IF EXISTS (SELECT 1 FROM #NUMBEROFEMPLOYEES)
         BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM tblCompanies_Employees e
+                JOIN #NUMBEROFEMPLOYEES n
+                    ON n.[Year] = e.[Year]
+                LEFT JOIN tblRecordsSources rs
+                    ON e.SourceID = rs.ID
+                LEFT JOIN tblRecordsIntelligence ri
+                    ON e.IntelligenceID = ri.ID
+                LEFT JOIN tblRecordsSIranking r
+                    ON r.[Source] = COALESCE(rs.[Rank], 12)
+                   AND r.[Intelligence] = COALESCE(ri.[Rank], 7)
+                WHERE e.IDATOM = @idatom
+                  AND n.NumberFrom IS NOT NULL
+                  AND r.Ranking >= @RankingID
+                  AND ISNULL(e.TotalNumberFrom, -1) < n.NumberFrom
+            )
+            BEGIN
+                UPDATE tblCompanies_Employees
+                    SET UpdatedDate = GETDATE(),
+                        SourceID = @SourceID,
+                        IntelligenceID = @IntelligenceID
+                WHERE IDATOM = @idatom;
+            END;
+
             ;WITH Existing AS (
                 SELECT
                     e.IDATOM,
                     e.[Year],
                     e.TotalNumberFrom,
-                    rs.[Rank] AS SourceRank,
-                    ri.[Rank] AS IntelligenceRank
+                    COALESCE(rs.[Rank], 12) AS SourceRank,
+                    COALESCE(ri.[Rank], 7) AS IntelligenceRank
                 FROM tblCompanies_Employees e
                 LEFT JOIN tblRecordsSources rs ON e.SourceID = rs.ID
                 LEFT JOIN tblRecordsIntelligence ri ON e.IntelligenceID = ri.ID
@@ -322,19 +341,16 @@ Replace the Employees cursor block with the block below.
                    AND r.[Intelligence] = ex.IntelligenceRank
             )
             UPDATE e
-                SET e.UpdatedDate = GETDATE(),
-                    e.SourceID = @SourceID,
-                    e.IntelligenceID = @IntelligenceID,
-                    e.TotalNumberFrom = n.NumberFrom
+                SET e.TotalNumberFrom = n.NumberFrom
             FROM tblCompanies_Employees e
-            JOIN #NUMBEROFEMPLOYEES n
-                ON n.[Year] = e.[Year]
             JOIN Ranked r
                 ON r.IDATOM = e.IDATOM
                AND r.[Year] = e.[Year]
+            JOIN #NUMBEROFEMPLOYEES n
+                ON n.[Year] = e.[Year]
             WHERE e.IDATOM = @idatom
               AND n.NumberFrom IS NOT NULL
-              AND (r.SourceRank IS NULL OR r.IntelligenceRank IS NULL OR r.Ranking >= @RankingID)
+              AND r.Ranking >= @RankingID
               AND ISNULL(e.TotalNumberFrom, -1) < n.NumberFrom;
 
             INSERT INTO tblCompanies_Employees (
