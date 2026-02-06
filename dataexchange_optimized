@@ -2863,15 +2863,36 @@ PRINT '  idatom = ' + ISNULL(CAST(@idatom AS NVARCHAR(50)), 'NULL');
 			   AND cn.IDATOM = @idatom
 			   AND cn.[Name] = tn.[Name];
 
+			;WITH LatestTradingNames AS (
+				SELECT
+					tn.ID,
+					tn.[Name],
+					tn.IsNative,
+					tn.IsHistory,
+					tn.STARTDATE,
+					tn.ENDDATE,
+					ROW_NUMBER() OVER (PARTITION BY tn.[Name] ORDER BY tn.ID DESC) AS rn
+				FROM #TradingNames tn WITH (NOLOCK)
+			)
 			INSERT INTO tblcompanies_names(idatom, NameType,Name, Intelligenceid, Sourceid, isHistory,DateUpdated, ReportedDate,startDate,EndDate)
-			SELECT DISTINCT @idatom,IsNative,[Name],@IntelligenceID as IntelligenceID,@SourceID as SourceID,IsHistory,GETDATE(),GETDATE(), STARTDATE, ENDDATE
-			from LatestTradingNames
-			where rn = 1					
-			  and not exists (
-				select 1
-				from tblcompanies_names cn
-				where cn.IDATOM = @idatom
-				  and cn.[Name] = LatestTradingNames.[Name]
+			SELECT DISTINCT
+				@idatom,
+				tn.IsNative,
+				tn.[Name],
+				@IntelligenceID as IntelligenceID,
+				@SourceID as SourceID,
+				tn.IsHistory,
+				GETDATE(),
+				GETDATE(),
+				tn.STARTDATE,
+				tn.ENDDATE
+			FROM LatestTradingNames tn
+			WHERE tn.rn = 1					
+			  AND NOT EXISTS (
+				SELECT 1
+				FROM tblcompanies_names cn
+				WHERE cn.IDATOM = @idatom
+				  AND cn.[Name] = tn.[Name]
 			);
 		END
 		
