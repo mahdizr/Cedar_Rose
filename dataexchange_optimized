@@ -1928,6 +1928,40 @@ BEGIN
 			@CountryID=ID,
 			@CountryPhoneCode = TelephoneCode 
 		from tblDic_GeoCountries where Country=@Country
+
+		IF OBJECT_ID ('tempdb..#GeoTowns', 'U') IS NOT NULL
+		DROP TABLE #GeoTowns;
+
+		CREATE TABLE #GeoTowns (
+			ID INT NOT NULL,
+			Town NVARCHAR(140) NOT NULL
+		);
+
+		IF OBJECT_ID ('tempdb..#GeoStreets', 'U') IS NOT NULL
+		DROP TABLE #GeoStreets;
+
+		CREATE TABLE #GeoStreets (
+			ID INT NOT NULL,
+			Street NVARCHAR(400) NOT NULL,
+			IdTown INT NOT NULL
+		);
+
+		IF @CountryID IS NOT NULL
+		BEGIN
+			INSERT INTO #GeoTowns (ID, Town)
+			SELECT t.ID, t.Town
+			FROM tblDic_GeoTowns t
+			JOIN tblDic_GeoDistricts d ON d.ID = t.IdDistrict
+			WHERE d.IdCountry = @CountryID;
+
+			INSERT INTO #GeoStreets (ID, Street, IdTown)
+			SELECT b.ID, b.Street, b.IdTown
+			FROM tblDic_GeoStreets b
+			JOIN #GeoTowns t ON t.ID = b.IdTown;
+		END
+
+		CREATE INDEX IX_GeoTowns_Town ON #GeoTowns (Town);
+		CREATE INDEX IX_GeoStreets_StreetTown ON #GeoStreets (Street, IdTown);
 		
 		--if((@UID is null or @UID ='') and @CountryID is not null and @Subject is not null and (select count(*) from #REGISTERS where REGISTERTYPEID = 4024813)>0) 
 		--begin
@@ -1970,28 +2004,32 @@ BEGIN
 			where IdBaseDicName=164
 
 			UPDATE ad set Idtown = t.ID,IdTownPostal=t.ID 
-			from tblDic_GeoTowns t 
-			join tblDic_GeoDistricts d on d.ID = t.IdDistrict 
-			join #Address ad on t.Town=ad.TOWN and d.IdCountry = @CountryID
+			from #GeoTowns t 
+			join #Address ad on t.Town=ad.TOWN
 
-			UPDATE ad SET Idtown = t.ID,IdTownPostal=t.ID 
-			FROM tblDic_GeoTowns t 
-			join tblDic_GeoDistricts d on d.ID = t.IdDistrict and d.IdCountry = @CountryID
-			JOIN #Address ad
-			ON REPLACE(LOWER(ad.TOWN), ' ', '') LIKE '%' + REPLACE(LOWER(t.Town), ' ', '') + '%'
-			OR SOUNDEX(ad.TOWN) = SOUNDEX(t.Town)
-			WHERE ad.Idtown IS NULL
+			IF EXISTS (SELECT 1 FROM #Address WHERE Idtown IS NULL AND TOWN IS NOT NULL)
+			BEGIN
+				UPDATE ad SET Idtown = t.ID,IdTownPostal=t.ID 
+				FROM #GeoTowns t 
+				JOIN #Address ad
+				ON REPLACE(LOWER(ad.TOWN), ' ', '') LIKE '%' + REPLACE(LOWER(t.Town), ' ', '') + '%'
+				OR SOUNDEX(ad.TOWN) = SOUNDEX(t.Town)
+				WHERE ad.Idtown IS NULL
+			END
 
 			UPDATE ad set IdArea = t.ID 
 		    from tblDic_GeoAreas t 
 		    join #Address ad on t.Area=ad.AREA and ad.idtown = t.IdTown
 
-			UPDATE ad set IdArea = t.ID 
-		    from tblDic_GeoAreas t 
-			JOIN #Address ad
-			ON REPLACE(LOWER(ad.AREA), ' ', '') LIKE '%' + REPLACE(LOWER(t.Area), ' ', '') + '%'
-			OR SOUNDEX(ad.AREA) = SOUNDEX(t.Area)
-			WHERE ad.IdArea IS NULL
+			IF EXISTS (SELECT 1 FROM #Address WHERE IdArea IS NULL AND AREA IS NOT NULL)
+			BEGIN
+				UPDATE ad set IdArea = t.ID 
+			    from tblDic_GeoAreas t 
+				JOIN #Address ad
+				ON REPLACE(LOWER(ad.AREA), ' ', '') LIKE '%' + REPLACE(LOWER(t.Area), ' ', '') + '%'
+				OR SOUNDEX(ad.AREA) = SOUNDEX(t.Area)
+				WHERE ad.IdArea IS NULL
+			END
 			
 			--UPDATE ad set IdBuilding=t.ID 
 			--from 
@@ -2008,33 +2046,33 @@ BEGIN
 			--WHERE ad.IdBuilding IS NULL
 
 			UPDATE ad set idstreet=b.ID 
-			from 
-			tblDic_GeoStreets b 
-			join tblDic_GeoTowns t on t.id = b.IdTown 
-			join tblDic_GeoDistricts d on d.ID = t.IdDistrict
-			join #Address ad on b.Street=ad.STREET and ad.idtown = t.id
-			and d.IdCountry = @CountryID
+			from #GeoStreets b 
+			join #Address ad on b.Street=ad.STREET and ad.idtown = b.IdTown
 
-			UPDATE ad
-			SET ad.idstreet = b.ID
-			FROM #Address ad
-			JOIN tblDic_GeoTowns t ON ad.idtown = t.id
-			JOIN tblDic_GeoDistricts d ON d.ID = t.IdDistrict
-			JOIN tblDic_GeoStreets b 
-			ON 
-			TRIM(LOWER(REPLACE(b.Street, '  ', ' '))) 
-			COLLATE Latin1_General_CI_AI
-			=
-			TRIM(LOWER(REPLACE(ad.Street, '  ', ' '))) 
-			COLLATE Latin1_General_CI_AI
-			WHERE d.IdCountry = @CountryID and ad.idstreet is null
+			IF EXISTS (SELECT 1 FROM #Address WHERE idstreet IS NULL AND idtown IS NOT NULL AND Street IS NOT NULL)
+			BEGIN
+				UPDATE ad
+				SET ad.idstreet = b.ID
+				FROM #Address ad
+				JOIN #GeoStreets b ON b.IdTown = ad.idtown
+				AND 
+				TRIM(LOWER(REPLACE(b.Street, '  ', ' '))) 
+				COLLATE Latin1_General_CI_AI
+				=
+				TRIM(LOWER(REPLACE(ad.Street, '  ', ' '))) 
+				COLLATE Latin1_General_CI_AI
+				WHERE ad.idstreet is null
+			END
 
-      UPDATE ad set idstreet = t.ID 
-		  from tblDic_GeoStreets t 
-			JOIN #Address ad
-			ON REPLACE(LOWER(ad.Street), ' ', '') LIKE '%' + REPLACE(LOWER(t.Street), ' ', '') + '%'
-			OR SOUNDEX(ad.Street) = SOUNDEX(t.Street)
-			WHERE ad.idstreet IS NULL
+      IF EXISTS (SELECT 1 FROM #Address WHERE idstreet IS NULL AND Street IS NOT NULL)
+      BEGIN
+	      UPDATE ad set idstreet = t.ID 
+			  from tblDic_GeoStreets t 
+				JOIN #Address ad
+				ON REPLACE(LOWER(ad.Street), ' ', '') LIKE '%' + REPLACE(LOWER(t.Street), ' ', '') + '%'
+				OR SOUNDEX(ad.Street) = SOUNDEX(t.Street)
+				WHERE ad.idstreet IS NULL
+	  END
 
 
 			--UPDATE ad set idstreet = t.ID 
