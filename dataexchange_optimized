@@ -49,7 +49,7 @@ BEGIN
 		BEGIN TRANSACTION;
 		BEGIN TRY
 
-		DECLARE @UID nvarchar(25),@UpdateDate DATE,@Subject NVARCHAR(100),@SubjectNativeName NVARCHAR(100),
+		DECLARE @UID varchar(50),@UpdateDate DATE,@Subject NVARCHAR(100),@SubjectNativeName NVARCHAR(100),
 		@COMPANYSHORTNAME nvarchar(100),@COMPANYSHORTNAMELOCAL nvarchar(100),@DATESTARTED DATE,@DATEREGISTERED DATE,
 		@idatom int,@Country NVARCHAR(100),
 	
@@ -996,7 +996,7 @@ BEGIN
 		[Name] NVARCHAR(255),
 		StatementType NVARCHAR(50),
 		FinancialValue DECIMAL(18,3),
-		FinancialCurrency NVARCHAR(10),
+		FinancialCurrency VARCHAR(50),
 		IdCurrency INT,
 		IdField INT,
         IsConsolidated INT			--Added by Vivek on 24-10-2025
@@ -1037,7 +1037,7 @@ BEGIN
 			[Name] NVARCHAR(255) '$.NAME',
 			StatementType NVARCHAR(50) '$.STATEMENTTYPE',
 			FinancialValueRaw NVARCHAR(50) '$.FINANCIALVALUE',
-			FinancialCurrency NVARCHAR(10) '$.FINANCIALCURRENCY'
+			FinancialCurrency VARCHAR(50) '$.FINANCIALCURRENCY'
 		) f;
 
 		--ALTER TABLE #Financials ADD FinancialDate_new DATE
@@ -1250,7 +1250,7 @@ BEGIN
 			Year INT,
 			ImportValue DECIMAL(18,4) NULL,
 			ExportValue DECIMAL(18,4) NULL,
-			Currency NVARCHAR(10),
+		Currency VARCHAR(50),
 			Comment NVARCHAR(500) NULL,
 			DateReported DATE NULL,
 			DateUpdated DATE NULL,
@@ -1682,7 +1682,7 @@ BEGIN
 				[Type] NVARCHAR(50) '$.TYPE',
 				[Audit] NVARCHAR(50) '$.AUDIT',
 				STATEMENTTYPE NVARCHAR(50) '$.STATEMENTTYPE',
-				FINANCIALCURRENCY NVARCHAR(10) '$.FINANCIALCURRENCY',
+				FINANCIALCURRENCY VARCHAR(50) '$.FINANCIALCURRENCY',
 				Analyses NVARCHAR(MAX) '$.Analyses' AS JSON
 			) ps
 		),
