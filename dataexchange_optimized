@@ -55,7 +55,7 @@ BEGIN
 	
 		@SourceID INT = 11, @IntelligenceID INT = 6, @RankingID INT = 2,
 		@DTRanking int = null
-		Declare @DTSourceID varchar(2), @DTIntelligenceID varchar(2)
+		Declare @DTSourceID nvarchar(10), @DTIntelligenceID nvarchar(10)
 
 		SELECT 
 		@UID=JSON_VALUE(@Json, '$.UID'),
