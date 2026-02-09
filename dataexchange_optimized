@@ -633,6 +633,9 @@ BEGIN
 		(ID,CRiSNO,SHAREHOLDERSCOMPANYNAME,SHAREHOLDERCOMPANYCOUNTRY)
 		SELECT DISTINCT ID,CRiSNO,SHAREHOLDERSCOMPANYNAME,SHAREHOLDERCOMPANYCOUNTRY from #SHAREHOLDERSCOMPANIES
 
+		CREATE INDEX IX_SHC_NameCountry ON #SHAREHOLDERSCOMPANIES_Distinct (SHAREHOLDERSCOMPANYNAME, IdCountry);
+		CREATE INDEX IX_SHC_ID ON #SHAREHOLDERSCOMPANIES_Distinct (ID);
+
 		--select * from #SHAREHOLDERSCOMPANIES
 		--select * from #SHAREHOLDERSCOMPANIES_Distinct
 		--return
@@ -2067,7 +2070,7 @@ BEGIN
       IF EXISTS (SELECT 1 FROM #Address WHERE idstreet IS NULL AND Street IS NOT NULL)
       BEGIN
 	      UPDATE ad set idstreet = t.ID 
-			  from tblDic_GeoStreets t 
+			  from #GeoStreets t 
 				JOIN #Address ad
 				ON REPLACE(LOWER(ad.Street), ' ', '') LIKE '%' + REPLACE(LOWER(t.Street), ' ', '') + '%'
 				OR SOUNDEX(ad.Street) = SOUNDEX(t.Street)
@@ -3959,21 +3962,47 @@ END
 		--a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
 		--and i.SHAREHOLDERSCOMPANYNAME is not null and Idcountry is not null
 
-		UPDATE i
-		SET i.ShareHolderCompanyIdatom = x.idatom
-		FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
-		CROSS APPLY (
-			SELECT TOP 1 com.idatom
-			FROM tblCompanies com WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK) ON a.idatom = com.idatom
-			WHERE 
-				ISNULL(com.RegisteredName, com.[Name]) = i.SHAREHOLDERSCOMPANYNAME
-				AND a.IdRegisteredCountry = i.IdCountry
+		;WITH Matches AS (
+			SELECT
+				i.ID,
+				com.idatom,
+				a.DateUpdated
+			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+			JOIN tblAtoms a WITH (NOLOCK)
+				ON a.IdRegisteredCountry = i.IdCountry
 				AND ISNULL(a.IsDeleted, 0) = 0
-			ORDER BY 
-				a.DateUpdated DESC     -- then use DateUpdated
-		) x
-		WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL;
+			JOIN tblCompanies com WITH (NOLOCK)
+				ON com.idatom = a.idatom
+				AND com.RegisteredName = i.SHAREHOLDERSCOMPANYNAME
+			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+			  AND i.IdCountry IS NOT NULL
+			UNION ALL
+			SELECT
+				i.ID,
+				com.idatom,
+				a.DateUpdated
+			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+			JOIN tblAtoms a WITH (NOLOCK)
+				ON a.IdRegisteredCountry = i.IdCountry
+				AND ISNULL(a.IsDeleted, 0) = 0
+			JOIN tblCompanies com WITH (NOLOCK)
+				ON com.idatom = a.idatom
+				AND com.RegisteredName IS NULL
+				AND com.[Name] = i.SHAREHOLDERSCOMPANYNAME
+			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+			  AND i.IdCountry IS NOT NULL
+		),
+		Ranked AS (
+			SELECT
+				ID,
+				idatom,
+				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
+			FROM Matches
+		)
+		UPDATE i
+		SET i.ShareHolderCompanyIdatom = r.idatom
+		FROM #SHAREHOLDERSCOMPANIES_Distinct i
+		JOIN Ranked r ON r.ID = i.ID AND r.rn = 1;
 
 		IF CURSOR_STATUS('global','cur_FormerData_Transfer')>=-1
 		BEGIN
@@ -6749,21 +6778,47 @@ END
 		--a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
 		--and i.SHAREHOLDERSCOMPANYNAME is not null
 
-		UPDATE i
-		SET i.ShareHolderCompanyIdatom = x.idatom
-		FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
-		CROSS APPLY (
-			SELECT TOP 1 com.idatom
-			FROM tblCompanies com WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK) ON a.idatom = com.idatom
-			WHERE 
-				ISNULL(com.RegisteredName, com.[Name]) = i.SHAREHOLDERSCOMPANYNAME
-				AND a.IdRegisteredCountry = i.IdCountry
+		;WITH Matches AS (
+			SELECT
+				i.ID,
+				com.idatom,
+				a.DateUpdated
+			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+			JOIN tblAtoms a WITH (NOLOCK)
+				ON a.IdRegisteredCountry = i.IdCountry
 				AND ISNULL(a.IsDeleted, 0) = 0
-			ORDER BY 
-				a.DateUpdated DESC     -- then use DateUpdated
-		) x
-		WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL;
+			JOIN tblCompanies com WITH (NOLOCK)
+				ON com.idatom = a.idatom
+				AND com.RegisteredName = i.SHAREHOLDERSCOMPANYNAME
+			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+			  AND i.IdCountry IS NOT NULL
+			UNION ALL
+			SELECT
+				i.ID,
+				com.idatom,
+				a.DateUpdated
+			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+			JOIN tblAtoms a WITH (NOLOCK)
+				ON a.IdRegisteredCountry = i.IdCountry
+				AND ISNULL(a.IsDeleted, 0) = 0
+			JOIN tblCompanies com WITH (NOLOCK)
+				ON com.idatom = a.idatom
+				AND com.RegisteredName IS NULL
+				AND com.[Name] = i.SHAREHOLDERSCOMPANYNAME
+			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+			  AND i.IdCountry IS NOT NULL
+		),
+		Ranked AS (
+			SELECT
+				ID,
+				idatom,
+				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
+			FROM Matches
+		)
+		UPDATE i
+		SET i.ShareHolderCompanyIdatom = r.idatom
+		FROM #SHAREHOLDERSCOMPANIES_Distinct i
+		JOIN Ranked r ON r.ID = i.ID AND r.rn = 1;
 
 		IF CURSOR_STATUS('global','cur_FormerData_Transfer')>=-1
 		BEGIN
