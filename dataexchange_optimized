@@ -2291,6 +2291,10 @@ BEGIN
 		
 		END
 
+		CREATE INDEX IX_HistoricalManagements_Main_Company
+		ON #HistoricalManagements_Main (ManagerType, FullName, IdCountry)
+		INCLUDE (ID, Companyidatom);
+
 		IF((SELECT COUNT(*) from #HistoricalActivities)>0)
 		BEGIN
 			
@@ -4925,29 +4929,67 @@ END
 
 		BEGIN
 			
-		update i set i.Companyidatom = com.idatom
-		from tblatoms a (Nolock)
-		join tblCompanies com (Nolock) on com.idatom = a.idatom
-		join #HistoricalManagements_Main i (Nolock) on isnull(com.RegisteredName,com.[Name]) = i.FullName
-		where 
-		a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
-		and i.FullName is not null and idcountry is not null and i.ManagerType='Company'
+		IF OBJECT_ID ('tempdb..#HistoryCompanyMatches_Update', 'U') IS NOT NULL
+		DROP TABLE #HistoryCompanyMatches_Update;
 
-		UPDATE i
-		SET i.Companyidatom = x.idatom
+		CREATE TABLE #HistoryCompanyMatches_Update (
+			ID INT NOT NULL,
+			idatom INT NOT NULL,
+			DateUpdated DATETIME NOT NULL
+		);
+
+		INSERT INTO #HistoryCompanyMatches_Update (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
 		FROM #HistoricalManagements_Main i WITH (NOLOCK)
-		CROSS APPLY (
-			SELECT TOP 1 com.idatom
-			FROM tblCompanies com WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK) ON a.idatom = com.idatom
-			WHERE 
-				isnull(com.RegisteredName,com.[Name]) = i.FullName
-				AND a.IdRegisteredCountry = i.IdCountry
-				AND ISNULL(a.IsDeleted, 0) = 0
-			ORDER BY 
-				a.DateUpdated DESC     -- then use DateUpdated
-		) x
-		WHERE i.FullName IS NOT NULL and Companyidatom is null and idcountry is not null and i.ManagerType='Company' --JDP ADDED
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName = i.FullName
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.ManagerType = 'Company'
+		  AND i.FullName IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		INSERT INTO #HistoryCompanyMatches_Update (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
+		FROM #HistoricalManagements_Main i WITH (NOLOCK)
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName IS NULL
+			AND com.[Name] = i.FullName
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.ManagerType = 'Company'
+		  AND i.FullName IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		CREATE INDEX IX_HistoryCompanyMatches_Update_ID_Date ON #HistoryCompanyMatches_Update (ID, DateUpdated DESC) INCLUDE (idatom);
+
+		;WITH Ranked AS (
+			SELECT
+				ID,
+				idatom,
+				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
+			FROM #HistoryCompanyMatches_Update
+		)
+		UPDATE i
+		SET i.Companyidatom = r.idatom
+		FROM #HistoricalManagements_Main i
+		JOIN Ranked r ON r.ID = i.ID AND r.rn = 1
+		WHERE i.ManagerType = 'Company';
+
+		IF OBJECT_ID ('tempdb..#HistoryCompanyMatches_Update', 'U') IS NOT NULL
+		DROP TABLE #HistoryCompanyMatches_Update;
 
 		----update i set i.Companyidatom = com.idatom
 		----from tblatoms a (Nolock)
@@ -7420,29 +7462,64 @@ END
 
 		BEGIN
 			
-		update i set i.Companyidatom = com.idatom
-		from tblatoms a (Nolock)
-		join tblCompanies com (Nolock) on com.idatom = a.idatom
-		join #HistoricalManagements_Main i (Nolock) on isnull(com.RegisteredName,com.[Name]) = i.FullName
-		where 
-		a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
-		and i.FullName is not null
+		IF OBJECT_ID ('tempdb..#HistoryCompanyMatches_Import', 'U') IS NOT NULL
+		DROP TABLE #HistoryCompanyMatches_Import;
 
-		UPDATE i
-		SET i.Companyidatom = x.idatom
+		CREATE TABLE #HistoryCompanyMatches_Import (
+			ID INT NOT NULL,
+			idatom INT NOT NULL,
+			DateUpdated DATETIME NOT NULL
+		);
+
+		INSERT INTO #HistoryCompanyMatches_Import (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
 		FROM #HistoricalManagements_Main i WITH (NOLOCK)
-		CROSS APPLY (
-			SELECT TOP 1 com.idatom
-			FROM tblCompanies com WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK) ON a.idatom = com.idatom
-			WHERE 
-				isnull(com.RegisteredName,com.[Name]) = i.FullName
-				AND a.IdRegisteredCountry = i.IdCountry
-				AND ISNULL(a.IsDeleted, 0) = 0
-			ORDER BY 
-				a.DateUpdated DESC     -- then use DateUpdated
-		) x
-		WHERE i.FullName IS NOT NULL and Companyidatom is null
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName = i.FullName
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.FullName IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		INSERT INTO #HistoryCompanyMatches_Import (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
+		FROM #HistoricalManagements_Main i WITH (NOLOCK)
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName IS NULL
+			AND com.[Name] = i.FullName
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.FullName IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		CREATE INDEX IX_HistoryCompanyMatches_Import_ID_Date ON #HistoryCompanyMatches_Import (ID, DateUpdated DESC) INCLUDE (idatom);
+
+		;WITH Ranked AS (
+			SELECT
+				ID,
+				idatom,
+				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
+			FROM #HistoryCompanyMatches_Import
+		)
+		UPDATE i
+		SET i.Companyidatom = r.idatom
+		FROM #HistoricalManagements_Main i
+		JOIN Ranked r ON r.ID = i.ID AND r.rn = 1;
+
+		IF OBJECT_ID ('tempdb..#HistoryCompanyMatches_Import', 'U') IS NOT NULL
+		DROP TABLE #HistoryCompanyMatches_Import;
 
 		----update i set i.Companyidatom = com.idatom
 		----from tblatoms a (Nolock)
