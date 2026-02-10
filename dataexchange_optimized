@@ -4018,6 +4018,12 @@ END
 		FROM #SHAREHOLDERSCOMPANIES_Distinct i
 		JOIN Ranked r ON r.ID = i.ID AND r.rn = 1;
 
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches;
+
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches;
+
 		IF CURSOR_STATUS('global','cur_FormerData_Transfer')>=-1
 		BEGIN
 			DEALLOCATE cur_FormerData_Transfer
