@@ -3962,42 +3962,56 @@ END
 		--a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
 		--and i.SHAREHOLDERSCOMPANYNAME is not null and Idcountry is not null
 
-		;WITH Matches AS (
-			SELECT
-				i.ID,
-				com.idatom,
-				a.DateUpdated
-			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK)
-				ON a.IdRegisteredCountry = i.IdCountry
-				AND ISNULL(a.IsDeleted, 0) = 0
-			JOIN tblCompanies com WITH (NOLOCK)
-				ON com.idatom = a.idatom
-				AND com.RegisteredName = i.SHAREHOLDERSCOMPANYNAME
-			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
-			  AND i.IdCountry IS NOT NULL
-			UNION ALL
-			SELECT
-				i.ID,
-				com.idatom,
-				a.DateUpdated
-			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK)
-				ON a.IdRegisteredCountry = i.IdCountry
-				AND ISNULL(a.IsDeleted, 0) = 0
-			JOIN tblCompanies com WITH (NOLOCK)
-				ON com.idatom = a.idatom
-				AND com.RegisteredName IS NULL
-				AND com.[Name] = i.SHAREHOLDERSCOMPANYNAME
-			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
-			  AND i.IdCountry IS NOT NULL
-		),
-		Ranked AS (
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches;
+
+		CREATE TABLE #ShareholderCompanyMatches (
+			ID INT NOT NULL,
+			idatom INT NOT NULL,
+			DateUpdated DATETIME NOT NULL
+		);
+
+		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
+		FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName = i.SHAREHOLDERSCOMPANYNAME
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
+		FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName IS NULL
+			AND com.[Name] = i.SHAREHOLDERSCOMPANYNAME
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		CREATE INDEX IX_ShareholderCompanyMatches_ID_Date ON #ShareholderCompanyMatches (ID, DateUpdated DESC) INCLUDE (idatom);
+
+		;WITH Ranked AS (
 			SELECT
 				ID,
 				idatom,
 				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
-			FROM Matches
+			FROM #ShareholderCompanyMatches
 		)
 		UPDATE i
 		SET i.ShareHolderCompanyIdatom = r.idatom
@@ -6778,42 +6792,56 @@ END
 		--a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
 		--and i.SHAREHOLDERSCOMPANYNAME is not null
 
-		;WITH Matches AS (
-			SELECT
-				i.ID,
-				com.idatom,
-				a.DateUpdated
-			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK)
-				ON a.IdRegisteredCountry = i.IdCountry
-				AND ISNULL(a.IsDeleted, 0) = 0
-			JOIN tblCompanies com WITH (NOLOCK)
-				ON com.idatom = a.idatom
-				AND com.RegisteredName = i.SHAREHOLDERSCOMPANYNAME
-			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
-			  AND i.IdCountry IS NOT NULL
-			UNION ALL
-			SELECT
-				i.ID,
-				com.idatom,
-				a.DateUpdated
-			FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
-			JOIN tblAtoms a WITH (NOLOCK)
-				ON a.IdRegisteredCountry = i.IdCountry
-				AND ISNULL(a.IsDeleted, 0) = 0
-			JOIN tblCompanies com WITH (NOLOCK)
-				ON com.idatom = a.idatom
-				AND com.RegisteredName IS NULL
-				AND com.[Name] = i.SHAREHOLDERSCOMPANYNAME
-			WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
-			  AND i.IdCountry IS NOT NULL
-		),
-		Ranked AS (
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches;
+
+		CREATE TABLE #ShareholderCompanyMatches (
+			ID INT NOT NULL,
+			idatom INT NOT NULL,
+			DateUpdated DATETIME NOT NULL
+		);
+
+		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
+		FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName = i.SHAREHOLDERSCOMPANYNAME
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		SELECT
+			i.ID,
+			a.IDATOM,
+			a.DateUpdated
+		FROM #SHAREHOLDERSCOMPANIES_Distinct i WITH (NOLOCK)
+		JOIN tblCompanies com WITH (NOLOCK)
+			ON com.RegisteredName IS NULL
+			AND com.[Name] = i.SHAREHOLDERSCOMPANYNAME
+		JOIN tblAtoms a WITH (NOLOCK)
+			ON a.IDATOM = com.IDATOM
+			AND a.IdRegisteredCountry = i.IdCountry
+			AND ISNULL(a.IsDeleted, 0) = 0
+		WHERE i.SHAREHOLDERSCOMPANYNAME IS NOT NULL
+		  AND i.IdCountry IS NOT NULL
+		OPTION (RECOMPILE);
+
+		CREATE INDEX IX_ShareholderCompanyMatches_ID_Date ON #ShareholderCompanyMatches (ID, DateUpdated DESC) INCLUDE (idatom);
+
+		;WITH Ranked AS (
 			SELECT
 				ID,
 				idatom,
 				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
-			FROM Matches
+			FROM #ShareholderCompanyMatches
 		)
 		UPDATE i
 		SET i.ShareHolderCompanyIdatom = r.idatom
