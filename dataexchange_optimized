@@ -3962,16 +3962,16 @@ END
 		--a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
 		--and i.SHAREHOLDERSCOMPANYNAME is not null and Idcountry is not null
 
-		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
-		DROP TABLE #ShareholderCompanyMatches;
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches_Update', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches_Update;
 
-		CREATE TABLE #ShareholderCompanyMatches (
+		CREATE TABLE #ShareholderCompanyMatches_Update (
 			ID INT NOT NULL,
 			idatom INT NOT NULL,
 			DateUpdated DATETIME NOT NULL
 		);
 
-		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		INSERT INTO #ShareholderCompanyMatches_Update (ID, idatom, DateUpdated)
 		SELECT
 			i.ID,
 			a.IDATOM,
@@ -3987,7 +3987,7 @@ END
 		  AND i.IdCountry IS NOT NULL
 		OPTION (RECOMPILE);
 
-		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		INSERT INTO #ShareholderCompanyMatches_Update (ID, idatom, DateUpdated)
 		SELECT
 			i.ID,
 			a.IDATOM,
@@ -4004,22 +4004,22 @@ END
 		  AND i.IdCountry IS NOT NULL
 		OPTION (RECOMPILE);
 
-		CREATE INDEX IX_ShareholderCompanyMatches_ID_Date ON #ShareholderCompanyMatches (ID, DateUpdated DESC) INCLUDE (idatom);
+		CREATE INDEX IX_ShareholderCompanyMatches_Update_ID_Date ON #ShareholderCompanyMatches_Update (ID, DateUpdated DESC) INCLUDE (idatom);
 
 		;WITH Ranked AS (
 			SELECT
 				ID,
 				idatom,
 				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
-			FROM #ShareholderCompanyMatches
+			FROM #ShareholderCompanyMatches_Update
 		)
 		UPDATE i
 		SET i.ShareHolderCompanyIdatom = r.idatom
 		FROM #SHAREHOLDERSCOMPANIES_Distinct i
 		JOIN Ranked r ON r.ID = i.ID AND r.rn = 1;
 
-		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
-		DROP TABLE #ShareholderCompanyMatches;
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches_Update', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches_Update;
 
 		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
 		DROP TABLE #ShareholderCompanyMatches;
@@ -6798,16 +6798,16 @@ END
 		--a.IdRegisteredCountry = i.Idcountry and ISNULL(a.IsDeleted,0) = 0 
 		--and i.SHAREHOLDERSCOMPANYNAME is not null
 
-		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches', 'U') IS NOT NULL
-		DROP TABLE #ShareholderCompanyMatches;
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches_Import', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches_Import;
 
-		CREATE TABLE #ShareholderCompanyMatches (
+		CREATE TABLE #ShareholderCompanyMatches_Import (
 			ID INT NOT NULL,
 			idatom INT NOT NULL,
 			DateUpdated DATETIME NOT NULL
 		);
 
-		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		INSERT INTO #ShareholderCompanyMatches_Import (ID, idatom, DateUpdated)
 		SELECT
 			i.ID,
 			a.IDATOM,
@@ -6823,7 +6823,7 @@ END
 		  AND i.IdCountry IS NOT NULL
 		OPTION (RECOMPILE);
 
-		INSERT INTO #ShareholderCompanyMatches (ID, idatom, DateUpdated)
+		INSERT INTO #ShareholderCompanyMatches_Import (ID, idatom, DateUpdated)
 		SELECT
 			i.ID,
 			a.IDATOM,
@@ -6840,19 +6840,22 @@ END
 		  AND i.IdCountry IS NOT NULL
 		OPTION (RECOMPILE);
 
-		CREATE INDEX IX_ShareholderCompanyMatches_ID_Date ON #ShareholderCompanyMatches (ID, DateUpdated DESC) INCLUDE (idatom);
+		CREATE INDEX IX_ShareholderCompanyMatches_Import_ID_Date ON #ShareholderCompanyMatches_Import (ID, DateUpdated DESC) INCLUDE (idatom);
 
 		;WITH Ranked AS (
 			SELECT
 				ID,
 				idatom,
 				ROW_NUMBER() OVER (PARTITION BY ID ORDER BY DateUpdated DESC) AS rn
-			FROM #ShareholderCompanyMatches
+			FROM #ShareholderCompanyMatches_Import
 		)
 		UPDATE i
 		SET i.ShareHolderCompanyIdatom = r.idatom
 		FROM #SHAREHOLDERSCOMPANIES_Distinct i
 		JOIN Ranked r ON r.ID = i.ID AND r.rn = 1;
+
+		IF OBJECT_ID ('tempdb..#ShareholderCompanyMatches_Import', 'U') IS NOT NULL
+		DROP TABLE #ShareholderCompanyMatches_Import;
 
 		IF CURSOR_STATUS('global','cur_FormerData_Transfer')>=-1
 		BEGIN
