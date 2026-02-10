@@ -6489,6 +6489,141 @@ from(
 	--select *
 	--from [TestCrifis2].[dbo].tblCompanies2Capacity p
 	--where idatom =13640264
+
+	/* ==================== FINAL TBLATOMS REDIRECTION / SOFT DELETE (START) ==================== */
+
+	IF OBJECT_ID('tempdb..#MergeMap') IS NOT NULL
+		DROP TABLE #MergeMap;
+
+	;WITH RankedData AS (
+		SELECT 
+		   d.*,
+			iif((select count(id) from TestCrifis2.dbo.cs_orders o where o.IDATOM is not null and idatom_1 = o.IDATOM and o.SpeedID IN (1,3,4,10) and ISNULL(o.StatusID,'')<>16)>0,1,
+			iif((select count(id) from TestCrifis2.dbo.cs_orders o where o.IDATOM is not null and idatom_1 = o.IDATOM)>0,1,0)) [HasOrders_1],		
+			iif((select count(id) from TestCrifis2.dbo.cs_orders o where o.IDATOM is not null and idatom_2 = o.IDATOM and o.SpeedID IN (1,3,4,10) and ISNULL(o.StatusID,'')<>16)>0,1,
+			iif((select count(id) from TestCrifis2.dbo.cs_orders o where o.IDATOM is not null and idatom_2 = o.IDATOM)>0,1,0)) [HasOrders_2]	
+		FROM ADIP.dbo.DuplicateCompanies d
+	),
+	MapCandidates AS (
+		SELECT DISTINCT
+			iif((HasOrders_1 = 1 and HasOrders_2 = 0) OR (HasOrders_1 = 0 and HasOrders_2 = 1),
+						iif(HasOrders_1 = 1 and HasOrders_2 = 0, idatom_1,idatom_2),
+						iif(DateUpdated_1 >= DateUpdated_2,  idatom_1, idatom_2)
+			) AS IdatomToKeep,
+			iif((HasOrders_1 = 1 and HasOrders_2 = 0) OR (HasOrders_1 = 0 and HasOrders_2 = 1),
+						iif(HasOrders_1 = 1 and HasOrders_2 = 0, idatom_2,idatom_1),
+						iif(DateUpdated_1 >= DateUpdated_2,  idatom_2, idatom_1)
+			) AS IdatomToDelete
+		FROM RankedData
+		WHERE ISNULL(idatom_1, 0) > 0
+		  AND ISNULL(idatom_2, 0) > 0
+	),
+	DedupedMap AS (
+		SELECT
+			IdatomToKeep,
+			IdatomToDelete,
+			ROW_NUMBER() OVER (PARTITION BY IdatomToDelete ORDER BY IdatomToKeep) AS rn
+		FROM MapCandidates
+		WHERE IdatomToKeep IS NOT NULL
+		  AND IdatomToDelete IS NOT NULL
+		  AND IdatomToKeep <> IdatomToDelete
+	)
+	SELECT IdatomToKeep, IdatomToDelete
+	INTO #MergeMap
+	FROM DedupedMap
+	WHERE rn = 1;
+
+	CREATE UNIQUE CLUSTERED INDEX IX_MergeMap_Delete ON #MergeMap (IdatomToDelete);
+
+	-- Collapse map chains to a terminal kept ID:
+	-- if B -> C and C -> D in this run, map B directly to D.
+	IF OBJECT_ID('tempdb..#FinalMergeMap') IS NOT NULL
+		DROP TABLE #FinalMergeMap;
+
+	SELECT IdatomToKeep, IdatomToDelete
+	INTO #FinalMergeMap
+	FROM #MergeMap;
+
+	CREATE UNIQUE CLUSTERED INDEX IX_FinalMergeMap_Delete ON #FinalMergeMap (IdatomToDelete);
+
+	DECLARE @MapRowsUpdated INT = 1;
+	DECLARE @MapPass INT = 0;
+
+	WHILE @MapRowsUpdated > 0 AND @MapPass < 100
+	BEGIN
+		UPDATE fm
+		SET fm.IdatomToKeep = fmNext.IdatomToKeep
+		FROM #FinalMergeMap fm
+		JOIN #FinalMergeMap fmNext ON fmNext.IdatomToDelete = fm.IdatomToKeep
+		WHERE fm.IdatomToKeep <> fmNext.IdatomToKeep;
+
+		SET @MapRowsUpdated = @@ROWCOUNT;
+		SET @MapPass += 1;
+	END;
+
+	-- Defensive cleanup in case of circular pairs.
+	DELETE FROM #FinalMergeMap
+	WHERE IdatomToKeep = IdatomToDelete;
+
+	-- Mark deleted atoms and point them to the final kept atom.
+	UPDATE deletedAtom
+	SET
+		deletedAtom.IsDeleted = 1,
+		deletedAtom.replacedByIdatom = m.IdatomToKeep,
+		deletedAtom.EasyNumber = COALESCE(keptAtom.EasyNumber, m.IdatomToKeep, deletedAtom.EasyNumber)
+	FROM TestCrifis2.dbo.tblAtoms deletedAtom
+	JOIN #FinalMergeMap m ON m.IdatomToDelete = deletedAtom.IDATOM
+	LEFT JOIN TestCrifis2.dbo.tblAtoms keptAtom ON keptAtom.IDATOM = m.IdatomToKeep;
+
+	-- Cascade previous replacements:
+	-- if A -> B and now B -> C, then A becomes A -> C (same for EasyNumber).
+	DECLARE @RowsUpdated INT = 1;
+	DECLARE @Pass INT = 0;
+
+	WHILE @RowsUpdated > 0 AND @Pass < 100
+	BEGIN
+		UPDATE previousAtom
+		SET
+			previousAtom.IsDeleted = 1,
+			previousAtom.replacedByIdatom = m.IdatomToKeep,
+			previousAtom.EasyNumber = COALESCE(keptAtom.EasyNumber, m.IdatomToKeep, previousAtom.EasyNumber)
+		FROM TestCrifis2.dbo.tblAtoms previousAtom
+		JOIN #FinalMergeMap m ON m.IdatomToDelete = previousAtom.replacedByIdatom
+		LEFT JOIN TestCrifis2.dbo.tblAtoms keptAtom ON keptAtom.IDATOM = m.IdatomToKeep
+		WHERE previousAtom.IDATOM <> m.IdatomToKeep
+		  AND (
+				previousAtom.replacedByIdatom <> m.IdatomToKeep
+				OR (
+					previousAtom.EasyNumber IS NULL
+					AND COALESCE(keptAtom.EasyNumber, m.IdatomToKeep) IS NOT NULL
+				)
+				OR (
+					previousAtom.EasyNumber IS NOT NULL
+					AND COALESCE(keptAtom.EasyNumber, m.IdatomToKeep) IS NULL
+				)
+				OR previousAtom.EasyNumber <> COALESCE(keptAtom.EasyNumber, m.IdatomToKeep)
+		  );
+
+		SET @RowsUpdated = @@ROWCOUNT;
+		SET @Pass += 1;
+	END;
+
+	-- Apply the same redirection rule when EasyNumber itself still points to a deleted atom.
+	UPDATE atom
+	SET atom.EasyNumber = COALESCE(keptAtom.EasyNumber, m.IdatomToKeep, atom.EasyNumber)
+	FROM TestCrifis2.dbo.tblAtoms atom
+	JOIN #FinalMergeMap m ON atom.EasyNumber = m.IdatomToDelete
+	LEFT JOIN TestCrifis2.dbo.tblAtoms keptAtom ON keptAtom.IDATOM = m.IdatomToKeep
+	WHERE atom.IDATOM <> m.IdatomToKeep
+	  AND (
+			atom.EasyNumber IS NULL
+			OR atom.EasyNumber <> COALESCE(keptAtom.EasyNumber, m.IdatomToKeep)
+	  );
+
+	DROP TABLE #FinalMergeMap;
+	DROP TABLE #MergeMap;
+
+	/* ==================== FINAL TBLATOMS REDIRECTION / SOFT DELETE (END) ==================== */
 	/* ==================== OTHER SECTION (END) ==================== */
 
 END
