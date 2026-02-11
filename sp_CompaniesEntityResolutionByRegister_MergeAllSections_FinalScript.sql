@@ -6565,6 +6565,27 @@ from(
 	DELETE FROM #FinalMergeMap
 	WHERE IdatomToKeep = IdatomToDelete;
 
+	-- EasyNumber normalization rule:
+	-- 1) If kept EasyNumber is NULL and deleted EasyNumber exists, copy deleted -> kept.
+	-- 2) Then always align deleted EasyNumber to kept EasyNumber.
+	;WITH KeepEasyCandidate AS (
+		SELECT
+			m.IdatomToKeep,
+			deletedAtom.EasyNumber,
+			ROW_NUMBER() OVER (PARTITION BY m.IdatomToKeep ORDER BY m.IdatomToDelete) AS rn
+		FROM #FinalMergeMap m
+		JOIN TestCrifis2.dbo.tblAtoms keptAtom ON keptAtom.IDATOM = m.IdatomToKeep
+		JOIN TestCrifis2.dbo.tblAtoms deletedAtom ON deletedAtom.IDATOM = m.IdatomToDelete
+		WHERE keptAtom.EasyNumber IS NULL
+		  AND deletedAtom.EasyNumber IS NOT NULL
+	)
+	UPDATE keptAtom
+	SET keptAtom.EasyNumber = c.EasyNumber
+	FROM TestCrifis2.dbo.tblAtoms keptAtom
+	JOIN KeepEasyCandidate c ON c.IdatomToKeep = keptAtom.IDATOM
+	                         AND c.rn = 1
+	WHERE keptAtom.EasyNumber IS NULL;
+
 	-- Mark deleted atoms and point them to the final kept atom.
 	UPDATE deletedAtom
 	SET

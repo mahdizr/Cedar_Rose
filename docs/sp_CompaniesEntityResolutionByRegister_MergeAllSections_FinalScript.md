@@ -142,7 +142,13 @@ For each `IdatomToDelete` in final map:
 
 - `IsDeleted = 1`
 - `replacedByIdatom = final kept atom`
-- `EasyNumber = keptAtom.EasyNumber` (if kept value is `NULL`, it remains `NULL`)
+
+`EasyNumber` is normalized with this rule set:
+
+1. If kept `EasyNumber` is `NULL` and deleted `EasyNumber` exists, copy deleted value to kept.
+2. Then set deleted `EasyNumber` to kept `EasyNumber`.
+3. If both have values, kept value remains authoritative for both.
+4. If both are `NULL`, both remain `NULL`.
 
 ### 6.3 Cascade previously deleted atoms
 If an older atom already pointed to an intermediate replacement, it is repointed to the new final kept atom.
@@ -152,7 +158,7 @@ Same cascade is applied to:
 - `EasyNumber`
 
 ### 6.4 Redirect dangling `EasyNumber` pointers
-If `EasyNumber` still points to an atom that is now deleted, it is redirected to the final kept target `EasyNumber` only. If the kept atom has `NULL` `EasyNumber`, the value becomes `NULL`.
+If `EasyNumber` still points to an atom that is now deleted, it is redirected to the final kept target `EasyNumber` (after normalization above).
 
 ---
 
