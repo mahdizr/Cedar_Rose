@@ -6570,7 +6570,7 @@ from(
 	SET
 		deletedAtom.IsDeleted = 1,
 		deletedAtom.replacedByIdatom = m.IdatomToKeep,
-		deletedAtom.EasyNumber = COALESCE(keptAtom.EasyNumber, m.IdatomToKeep, deletedAtom.EasyNumber)
+		deletedAtom.EasyNumber = keptAtom.EasyNumber
 	FROM TestCrifis2.dbo.tblAtoms deletedAtom
 	JOIN #FinalMergeMap m ON m.IdatomToDelete = deletedAtom.IDATOM
 	LEFT JOIN TestCrifis2.dbo.tblAtoms keptAtom ON keptAtom.IDATOM = m.IdatomToKeep;
@@ -6586,7 +6586,7 @@ from(
 		SET
 			previousAtom.IsDeleted = 1,
 			previousAtom.replacedByIdatom = m.IdatomToKeep,
-			previousAtom.EasyNumber = COALESCE(keptAtom.EasyNumber, m.IdatomToKeep, previousAtom.EasyNumber)
+			previousAtom.EasyNumber = keptAtom.EasyNumber
 		FROM TestCrifis2.dbo.tblAtoms previousAtom
 		JOIN #FinalMergeMap m ON m.IdatomToDelete = previousAtom.replacedByIdatom
 		LEFT JOIN TestCrifis2.dbo.tblAtoms keptAtom ON keptAtom.IDATOM = m.IdatomToKeep
@@ -6595,13 +6595,13 @@ from(
 				previousAtom.replacedByIdatom <> m.IdatomToKeep
 				OR (
 					previousAtom.EasyNumber IS NULL
-					AND COALESCE(keptAtom.EasyNumber, m.IdatomToKeep) IS NOT NULL
+					AND keptAtom.EasyNumber IS NOT NULL
 				)
 				OR (
 					previousAtom.EasyNumber IS NOT NULL
-					AND COALESCE(keptAtom.EasyNumber, m.IdatomToKeep) IS NULL
+					AND keptAtom.EasyNumber IS NULL
 				)
-				OR previousAtom.EasyNumber <> COALESCE(keptAtom.EasyNumber, m.IdatomToKeep)
+				OR previousAtom.EasyNumber <> keptAtom.EasyNumber
 		  );
 
 		SET @RowsUpdated = @@ROWCOUNT;
@@ -6610,14 +6610,15 @@ from(
 
 	-- Apply the same redirection rule when EasyNumber itself still points to a deleted atom.
 	UPDATE atom
-	SET atom.EasyNumber = COALESCE(keptAtom.EasyNumber, m.IdatomToKeep, atom.EasyNumber)
+	SET atom.EasyNumber = keptAtom.EasyNumber
 	FROM TestCrifis2.dbo.tblAtoms atom
 	JOIN #FinalMergeMap m ON atom.EasyNumber = m.IdatomToDelete
 	LEFT JOIN TestCrifis2.dbo.tblAtoms keptAtom ON keptAtom.IDATOM = m.IdatomToKeep
 	WHERE atom.IDATOM <> m.IdatomToKeep
 	  AND (
-			atom.EasyNumber IS NULL
-			OR atom.EasyNumber <> COALESCE(keptAtom.EasyNumber, m.IdatomToKeep)
+			(atom.EasyNumber IS NULL AND keptAtom.EasyNumber IS NOT NULL)
+			OR (atom.EasyNumber IS NOT NULL AND keptAtom.EasyNumber IS NULL)
+			OR atom.EasyNumber <> keptAtom.EasyNumber
 	  );
 
 	DROP TABLE #FinalMergeMap;
