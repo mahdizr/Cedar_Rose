@@ -79,53 +79,60 @@ BEGIN
 	
 	--Duplicate Records
 
-	;WITH CTE AS (
-	 SELECT *,
-		 row_number() OVER(PARTITION BY [Detail_Page_URL]
-		,[Registration No# of Company]
-		,[Company Name]
-		,[Company Address]
-		,[Procedure Type]
-		,[File Number]
-		,[Court Application Number]
-		,[Application Date]
-		,[Court that issued the Order]
-		,[Application by]
-		,[Winding Up Order Date]
-		,[Publication Date of the Winding Up Order]
-		,[Annulment Date of the Winding Up Order]
-		,[Way of Annulment]
-		,[Examiners Name]
-		,[Jurisdiction: Main, Secondary, Local]
-		,[Completion Date of the Main Procedure]
-		,[Deadline for Appeals Against the Order for Initializing the Proc]
-		,[Competent Court for Appeals Against the Order for Initializing t]
-		,[Deadline for Debt Verification Submissions]
-		,[Name of Liquidator]
-		,[Liquidator's Appointment Date]
-		,[Liquidator's Address]
-		,[Liquidator's Email]
-		,[Date of First Meeting of Creditors]
-		,[Date of First Meeting of Shareholders]
-		,[?????????? ????????? ?????]
-		,[Reason for suspension]
-		,[Company Dissolution Date]
-		,[Publication date of Dissolution]
-		,[Date of Liquidator's Discharge]
-		,[???????????]
-		,[Name of Receiver/Manager]
-		,[Address of Receiver/Manager]
-		,[Receiver/Manager Appointment Date]
-		,[Receiver/Manager Resignation Date]
-		,[Name of Provisional Liquidator]
-		,[Address of Provisional Liquidator]
-		,[Date of Appointment of Provisional Liquidator]				  
-			ORDER BY [Registration No# of Company] ) AS [rn]
-		FROM [ADIP-NOT-CY-500].[dbo].[CY500-merged_company_liquidation]
-	)
-	--select * 
-	Delete 
-	from CTE WHERE [rn] > 1
+	DECLARE @DuplicateRowsDeleted INT = 1;
+
+	WHILE (@DuplicateRowsDeleted > 0)
+	BEGIN
+		;WITH CTE AS (
+			SELECT *
+				,row_number() OVER(PARTITION BY [Detail_Page_URL]
+				,[Registration No# of Company]
+				,[Company Name]
+				,[Company Address]
+				,[Procedure Type]
+				,[File Number]
+				,[Court Application Number]
+				,[Application Date]
+				,[Court that issued the Order]
+				,[Application by]
+				,[Winding Up Order Date]
+				,[Publication Date of the Winding Up Order]
+				,[Annulment Date of the Winding Up Order]
+				,[Way of Annulment]
+				,[Examiners Name]
+				,[Jurisdiction: Main, Secondary, Local]
+				,[Completion Date of the Main Procedure]
+				,[Deadline for Appeals Against the Order for Initializing the Proc]
+				,[Competent Court for Appeals Against the Order for Initializing t]
+				,[Deadline for Debt Verification Submissions]
+				,[Name of Liquidator]
+				,[Liquidator's Appointment Date]
+				,[Liquidator's Address]
+				,[Liquidator's Email]
+				,[Date of First Meeting of Creditors]
+				,[Date of First Meeting of Shareholders]
+				,[?????????? ????????? ?????]
+				,[Reason for suspension]
+				,[Company Dissolution Date]
+				,[Publication date of Dissolution]
+				,[Date of Liquidator's Discharge]
+				,[???????????]
+				,[Name of Receiver/Manager]
+				,[Address of Receiver/Manager]
+				,[Receiver/Manager Appointment Date]
+				,[Receiver/Manager Resignation Date]
+				,[Name of Provisional Liquidator]
+				,[Address of Provisional Liquidator]
+				,[Date of Appointment of Provisional Liquidator]
+				ORDER BY [Registration No# of Company]) AS [rn]
+			FROM [ADIP-NOT-CY-500].[dbo].[CY500-merged_company_liquidation]
+		)
+		DELETE TOP (10000)
+		FROM CTE
+		WHERE [rn] > 1;
+
+		SET @DuplicateRowsDeleted = @@ROWCOUNT;
+	END
 
 	ALTER TABLE [ADIP-NOT-CY-500].[dbo].[CY500-merged_company_liquidation]
 	ADD ID INT NOT NULL IDENTITY(1,1),		
